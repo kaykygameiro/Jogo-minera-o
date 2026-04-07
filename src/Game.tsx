@@ -15,7 +15,7 @@ interface Cell {
 const TILE_SIZE = 32;
 const WIDTH = 30;
 const HEIGHT = 20;
-const TICK_RATE = 100;
+const TICK_RATE = 90;
 
 const preRenderedTiles: Record<string, HTMLCanvasElement> = {};
 
@@ -459,7 +459,9 @@ export default function Game() {
     explosiveUnderPlayer: null as { type: 'DYNAMITE' | 'BOMB', timer: number } | null,
     gameOver: false
   });
-const keysPressed = useRef<Set<string>>(new Set());
+  const keysPressed = useRef<Set<string>>(new Set());
+
+
   // Sync ref to state for HUD updates
   useEffect(() => {
     const interval = setInterval(() => {
@@ -474,23 +476,25 @@ const keysPressed = useRef<Set<string>>(new Set());
       });
     }, 100);
     return () => clearInterval(interval);
+    const keysPressed = useRef<Set<string>>(new Set());
+
   }, []);
+
+
+
 
 useEffect(() => {
   const handleKeyDown = (e: KeyboardEvent) => {
     soundEngine.init();
-    const key = e.key.toLowerCase();
-    if (['arrowup', 'arrowdown', 'arrowleft', 'arrowright', 'w', 'a', 's', 'd', ' ', 'b'].includes(key)) {
+    const k = e.key.toLowerCase();
+    if (['arrowup', 'arrowdown', 'arrowleft', 'arrowright', 'w', 'a', 's', 'd', ' ', 'b'].includes(k)) {
       e.preventDefault();
-      keysPressed.current.add(key);
+      keysPressed.current.add(k);
     }
   };
-
   const handleKeyUp = (e: KeyboardEvent) => {
-    const key = e.key.toLowerCase();
-    keysPressed.current.delete(key);
+    keysPressed.current.delete(e.key.toLowerCase());
   };
-
   window.addEventListener('keydown', handleKeyDown);
   window.addEventListener('keyup', handleKeyUp);
   return () => {
@@ -498,6 +502,7 @@ useEffect(() => {
     window.removeEventListener('keyup', handleKeyUp);
   };
 }, []);
+
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -645,19 +650,25 @@ const processInput = () => {
         }
       }
 
-      // Process physics bottom to top
+     // Process physics bottom to top
       for (let y = HEIGHT - 1; y >= 0; y--) {
         for (let x = 0; x < WIDTH; x++) {
           const cell = grid[y][x];
-          if (cell.type === 'DIAMOND') diamondsLeft++;
-          if (cell.updatedThisTick) continue;
 
+          // 1. DETECTAR O PLAYER PRIMEIRO (Para evitar Game Over injusto)
           if (cell.type === 'PLAYER') {
             playerAlive = true;
             state.playerX = x;
             state.playerY = y;
           }
 
+          // 2. CONTAR DIAMANTES
+          if (cell.type === 'DIAMOND') diamondsLeft++;
+
+          // 3. PULAR SE JÁ FOI ATUALIZADO (Aqui é onde o loop parava antes)
+          if (cell.updatedThisTick) continue;
+
+          // 4. LÓGICA DE QUEDA (PEDRAS E DIAMANTES)
           if (cell.type === 'ROCK' || cell.type === 'DIAMOND') {
             if (y < HEIGHT - 1) {
               const below = grid[y + 1][x];
