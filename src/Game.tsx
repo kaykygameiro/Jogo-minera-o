@@ -639,10 +639,8 @@ const processInput = () => {
             for (let dx = -radius; dx <= radius; dx++) {
               const ny = state.playerY + dy;
               const nx = state.playerX + dx;
-              if (ny >= 0 && ny < HEIGHT && nx >= 0 && nx < WIDTH) {
-                if (grid[ny][nx].type !== 'WALL') {
-                  grid[ny][nx] = { type: 'EXPLOSION', falling: false, timer: 5, updatedThisTick: true, dir: 0 };
-                }
+              if (ny > 0 && ny < HEIGHT - 1 && nx > 0 && nx < WIDTH - 1) {
+                grid[ny][nx] = { type: 'EXPLOSION', falling: false, timer: 5, updatedThisTick: true, dir: 0 };
               }
             }
           }
@@ -714,10 +712,8 @@ const processInput = () => {
                 for (let dx = -radius; dx <= radius; dx++) {
                   const ny = y + dy;
                   const nx = x + dx;
-                  if (ny >= 0 && ny < HEIGHT && nx >= 0 && nx < WIDTH) {
-                    if (grid[ny][nx].type !== 'WALL') {
-                      grid[ny][nx] = { type: 'EXPLOSION', falling: false, timer: 5, updatedThisTick: true, dir: 0 };
-                    }
+                  if (ny > 0 && ny < HEIGHT - 1 && nx > 0 && nx < WIDTH - 1) {
+                    grid[ny][nx] = { type: 'EXPLOSION', falling: false, timer: 5, updatedThisTick: true, dir: 0 };
                   }
                 }
               }
