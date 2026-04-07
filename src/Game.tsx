@@ -15,7 +15,7 @@ interface Cell {
 const TILE_SIZE = 32;
 const WIDTH = 30;
 const HEIGHT = 20;
-const TICK_RATE = 150;
+const TICK_RATE = 100;
 
 const preRenderedTiles: Record<string, HTMLCanvasElement> = {};
 
@@ -443,6 +443,7 @@ export default function Game() {
 
   const initialLevel = generateLevel(0);
   const gameState = useRef({
+    
     grid: initialLevel.grid,
     playerX: initialLevel.startX,
     playerY: initialLevel.startY,
@@ -458,7 +459,7 @@ export default function Game() {
     explosiveUnderPlayer: null as { type: 'DYNAMITE' | 'BOMB', timer: number } | null,
     gameOver: false
   });
-
+const keysPressed = useRef<Set<string>>(new Set());
   // Sync ref to state for HUD updates
   useEffect(() => {
     const interval = setInterval(() => {
@@ -475,18 +476,28 @@ export default function Game() {
     return () => clearInterval(interval);
   }, []);
 
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      soundEngine.init();
-      if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'w', 'a', 's', 'd', 'W', 'A', 'S', 'D', ' ', 'b', 'B'].includes(e.key)) {
-        e.preventDefault();
-        gameState.current.inputQueue.push(e.key);
-      }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, []);
+useEffect(() => {
+  const handleKeyDown = (e: KeyboardEvent) => {
+    soundEngine.init();
+    const key = e.key.toLowerCase();
+    if (['arrowup', 'arrowdown', 'arrowleft', 'arrowright', 'w', 'a', 's', 'd', ' ', 'b'].includes(key)) {
+      e.preventDefault();
+      keysPressed.current.add(key);
+    }
+  };
 
+  const handleKeyUp = (e: KeyboardEvent) => {
+    const key = e.key.toLowerCase();
+    keysPressed.current.delete(key);
+  };
+
+  window.addEventListener('keydown', handleKeyDown);
+  window.addEventListener('keyup', handleKeyUp);
+  return () => {
+    window.removeEventListener('keydown', handleKeyDown);
+    window.removeEventListener('keyup', handleKeyUp);
+  };
+}, []);
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -512,83 +523,89 @@ export default function Game() {
       }
     };
 
-    const processInput = () => {
-      const state = gameState.current;
-      const grid = state.grid;
-      const key = state.inputQueue.shift();
-      if (!key || state.isDead) return;
+const processInput = () => {
+  const state = gameState.current;
+  const grid = state.grid;
+  const keys = keysPressed.current;
+  
+  if (state.isDead) return;
 
-      let dx = 0;
-      let dy = 0;
-      if (key === 'ArrowUp' || key === 'w' || key === 'W') dy = -1;
-      if (key === 'ArrowDown' || key === 's' || key === 'S') dy = 1;
-      if (key === 'ArrowLeft' || key === 'a' || key === 'A') dx = -1;
-      if (key === 'ArrowRight' || key === 'd' || key === 'D') dx = 1;
+  let dx = 0;
+  let dy = 0;
 
-      if (key === ' ' && state.dynamite > 0 && !state.explosiveUnderPlayer) {
+  // Movimento contínuo baseado nas teclas seguradas
+  if (keys.has('arrowup') || keys.has('w')) dy = -1;
+  else if (keys.has('arrowdown') || keys.has('s')) dy = 1;
+  else if (keys.has('arrowleft') || keys.has('a')) dx = -1;
+  else if (keys.has('arrowright') || keys.has('d')) dx = 1;
+
+  // Lógica de Dinamite e Bomba
+  if (keys.has(' ') && state.dynamite > 0 && !state.explosiveUnderPlayer) {
+    if (grid[state.playerY][state.playerX].type === 'PLAYER') {
+       state.explosiveUnderPlayer = { type: 'DYNAMITE', timer: 20 };
+       state.dynamite--;
+    }
+  }
+
+  if (keys.has('b') && state.bombs > 0 && !state.explosiveUnderPlayer) {
+     state.explosiveUnderPlayer = { type: 'BOMB', timer: 30 };
+     state.bombs--;
+  }
+
+  if (dx !== 0 || dy !== 0) {
+    const nx = state.playerX + dx;
+    const ny = state.playerY + dy;
+
+    if (nx >= 0 && nx < WIDTH && ny >= 0 && ny < HEIGHT) {
+      const target = grid[ny][nx];
+      
+      // Move player
+      if (target.type === 'EMPTY' || target.type === 'DIRT' || target.type === 'DIAMOND') {
+        if (target.type === 'DIAMOND') {
+          soundEngine.diamond();
+          state.diamonds++;
+          state.score += 100;
+        } else if (target.type === 'DIRT') {
+          soundEngine.dig();
+        } else {
+          soundEngine.move();
+        }
+        
+        grid[ny][nx] = { type: 'PLAYER', falling: false, timer: 0, updatedThisTick: true, dir: 0 };
+        
         if (grid[state.playerY][state.playerX].type === 'PLAYER') {
-           state.explosiveUnderPlayer = { type: 'DYNAMITE', timer: 20 };
-           state.dynamite--;
+           if (state.explosiveUnderPlayer) {
+             grid[state.playerY][state.playerX] = { type: state.explosiveUnderPlayer.type, falling: false, timer: state.explosiveUnderPlayer.timer, updatedThisTick: true, dir: 0 };
+             state.explosiveUnderPlayer = null;
+           } else {
+             grid[state.playerY][state.playerX] = { type: 'EMPTY', falling: false, timer: 0, updatedThisTick: true, dir: 0 };
+           }
         }
-      }
-
-      if ((key === 'b' || key === 'B') && state.bombs > 0 && !state.explosiveUnderPlayer) {
-         state.explosiveUnderPlayer = { type: 'BOMB', timer: 30 };
-         state.bombs--;
-      }
-
-      if (dx !== 0 || dy !== 0) {
-        const nx = state.playerX + dx;
-        const ny = state.playerY + dy;
-
-        if (nx >= 0 && nx < WIDTH && ny >= 0 && ny < HEIGHT) {
-          const target = grid[ny][nx];
+        state.playerX = nx;
+        state.playerY = ny;
+      } 
+      // Push rock
+      else if (target.type === 'ROCK' && dy === 0) {
+        const nnx = nx + dx;
+        if (nnx >= 0 && nnx < WIDTH && grid[ny][nnx].type === 'EMPTY') {
+          grid[ny][nnx] = { type: 'ROCK', falling: false, timer: 0, updatedThisTick: true, dir: 0 };
+          grid[ny][nx] = { type: 'PLAYER', falling: false, timer: 0, updatedThisTick: true, dir: 0 };
           
-          if (target.type === 'EMPTY' || target.type === 'DIRT' || target.type === 'DIAMOND') {
-            if (target.type === 'DIAMOND') {
-              soundEngine.diamond();
-              state.diamonds++;
-              state.score += 100;
-            } else if (target.type === 'DIRT') {
-              soundEngine.dig();
-            } else {
-              soundEngine.move();
-            }
-            
-            // Move player
-            grid[ny][nx] = { type: 'PLAYER', falling: false, timer: 0, updatedThisTick: true, dir: 0 };
-            // If we didn't just place a bomb/dynamite, clear old spot
-            if (grid[state.playerY][state.playerX].type === 'PLAYER') {
-               if (state.explosiveUnderPlayer) {
-                 grid[state.playerY][state.playerX] = { type: state.explosiveUnderPlayer.type, falling: false, timer: state.explosiveUnderPlayer.timer, updatedThisTick: true, dir: 0 };
-                 state.explosiveUnderPlayer = null;
-               } else {
-                 grid[state.playerY][state.playerX] = { type: 'EMPTY', falling: false, timer: 0, updatedThisTick: true, dir: 0 };
-               }
-            }
-            state.playerX = nx;
-            state.playerY = ny;
-          } else if (target.type === 'ROCK' && dy === 0) {
-            // Push rock
-            const nnx = nx + dx;
-            if (nnx >= 0 && nnx < WIDTH && grid[ny][nnx].type === 'EMPTY') {
-              grid[ny][nnx] = { type: 'ROCK', falling: false, timer: 0, updatedThisTick: true, dir: 0 };
-              grid[ny][nx] = { type: 'PLAYER', falling: false, timer: 0, updatedThisTick: true, dir: 0 };
-              if (grid[state.playerY][state.playerX].type === 'PLAYER') {
-                 if (state.explosiveUnderPlayer) {
-                   grid[state.playerY][state.playerX] = { type: state.explosiveUnderPlayer.type, falling: false, timer: state.explosiveUnderPlayer.timer, updatedThisTick: true, dir: 0 };
-                   state.explosiveUnderPlayer = null;
-                 } else {
-                   grid[state.playerY][state.playerX] = { type: 'EMPTY', falling: false, timer: 0, updatedThisTick: true, dir: 0 };
-                 }
-              }
-              state.playerX = nx;
-              state.playerY = ny;
-            }
+          if (grid[state.playerY][state.playerX].type === 'PLAYER') {
+             if (state.explosiveUnderPlayer) {
+               grid[state.playerY][state.playerX] = { type: state.explosiveUnderPlayer.type, falling: false, timer: state.explosiveUnderPlayer.timer, updatedThisTick: true, dir: 0 };
+               state.explosiveUnderPlayer = null;
+             } else {
+               grid[state.playerY][state.playerX] = { type: 'EMPTY', falling: false, timer: 0, updatedThisTick: true, dir: 0 };
+             }
           }
+          state.playerX = nx;
+          state.playerY = ny;
         }
       }
-    };
+    }
+  }
+};
 
     const tick = () => {
       const state = gameState.current;
