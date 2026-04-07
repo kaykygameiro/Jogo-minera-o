@@ -1,0 +1,5 @@
+{
+  "name": "Dot Valley",
+  "description": "An arcade/puzzle game where you dig for diamonds, avoid falling rocks, and use explosives to clear obstacles.",
+  "requestFramePermissions": []
+}
